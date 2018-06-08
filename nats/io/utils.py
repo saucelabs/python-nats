@@ -14,6 +14,8 @@
 
 import random
 
+from twisted.internet import defer, reactor
+
 INBOX_PREFIX = "_INBOX."
 
 
@@ -35,3 +37,9 @@ def new_inbox():
                     hex_rand(0x10),
                     hex_rand(0x10),
                     hex_rand(0x24)])
+
+
+def sleep(secs):
+    d = defer.Deferred()
+    reactor.callLater(secs, d.callback, None)
+    return d

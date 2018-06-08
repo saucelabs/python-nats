@@ -1,1 +1,2 @@
 tornado>=4.2,<5.0
+Twisted==16.5.0

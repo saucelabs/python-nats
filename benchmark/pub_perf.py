@@ -3,7 +3,7 @@ import tornado.ioloop
 import tornado.gen
 import time
 from random import randint
-from nats.io.client import Client as NATS
+from nats.io.client import NatsProtocol as NATS
 
 DEFAULT_NUM_MSGS = 100000
 DEFAULT_NUM_PUBS = 1

@@ -19,7 +19,7 @@ import time
 import ssl
 from datetime import datetime
 from nats.io.utils  import new_inbox
-from nats.io.client import Client as NATS
+from nats.io.client import NatsProtocol as NATS
 
 @tornado.gen.coroutine
 def main():

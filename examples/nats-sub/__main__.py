@@ -17,7 +17,7 @@ import tornado.ioloop
 import tornado.gen
 import time
 
-from nats.io.client import Client as NATS
+from nats.io.client import NatsProtocol as NATS
 
 def show_usage():
   print("nats-sub SUBJECT [-s SERVER] [-q QUEUE]")

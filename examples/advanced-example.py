@@ -16,7 +16,7 @@
 import tornado.ioloop
 import tornado.gen
 import time
-from nats.io import Client as NATS
+from nats.io import NatsProtocol as NATS
 
 @tornado.gen.coroutine
 def main():

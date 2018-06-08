@@ -19,7 +19,7 @@ import os
 
 from datetime import timedelta
 from collections import defaultdict as Hash
-from nats.io import Client
+from nats.io import NatsProtocol
 from nats.io.errors import *
 from nats.io.utils import new_inbox, INBOX_PREFIX
 from nats.protocol.parser import *
@@ -166,7 +166,7 @@ class ClientUtilsTest(unittest.TestCase):
             self.__class__.__name__, self._testMethodName))
 
     def test_default_connect_command(self):
-        nc = Client()
+        nc = NatsProtocol()
         nc.options["verbose"] = False
         nc.options["pedantic"] = False
         nc.options["auth_required"] = False
@@ -176,7 +176,7 @@ class ClientUtilsTest(unittest.TestCase):
         self.assertEqual(expected, got)
 
     def test_default_connect_command_with_name(self):
-        nc = Client()
+        nc = NatsProtocol()
         nc.options["verbose"] = False
         nc.options["pedantic"] = False
         nc.options["auth_required"] = False
@@ -231,7 +231,7 @@ class ClientTest(tornado.testing.AsyncTestCase):
 
     @tornado.testing.gen_test
     def test_connect_verbose(self):
-        nc = Client()
+        nc = NatsProtocol()
         options = {
             "verbose": True,
             "io_loop": self.io_loop
@@ -247,7 +247,7 @@ class ClientTest(tornado.testing.AsyncTestCase):
 
     @tornado.testing.gen_test
     def test_connect_pedantic(self):
-        nc = Client()
+        nc = NatsProtocol()
         yield nc.connect(io_loop=self.io_loop, pedantic=True)
 
         info_keys = nc._server_info.keys()
@@ -259,13 +259,13 @@ class ClientTest(tornado.testing.AsyncTestCase):
 
     @tornado.testing.gen_test
     def test_connect_custom_connect_timeout(self):
-        nc = Client()
+        nc = NatsProtocol()
         yield nc.connect(io_loop=self.io_loop, connect_timeout=1)
         self.assertEqual(1, nc.options["connect_timeout"])
 
     @tornado.testing.gen_test
     def test_parse_info(self):
-        nc = Client()
+        nc = NatsProtocol()
         yield nc.connect(io_loop=self.io_loop)
 
         info_keys = nc._server_info.keys()
@@ -284,7 +284,7 @@ class ClientTest(tornado.testing.AsyncTestCase):
 
         class SampleClient():
             def __init__(self):
-                self.nc = Client()
+                self.nc = NatsProtocol()
                 self.disconnected_cb_called = False
 
             def disconnected_cb(self):
@@ -306,7 +306,7 @@ class ClientTest(tornado.testing.AsyncTestCase):
 
         class SampleClient():
             def __init__(self):
-                self.nc = Client()
+                self.nc = NatsProtocol()
                 self.disconnected_cb_called = False
                 self.closed_cb_called = False
 
@@ -335,7 +335,7 @@ class ClientTest(tornado.testing.AsyncTestCase):
 
         class SampleClient():
             def __init__(self):
-                self.nc = Client()
+                self.nc = NatsProtocol()
                 self.disconnected_cb_called = False
                 self.closed_cb_called = False
 
@@ -364,7 +364,7 @@ class ClientTest(tornado.testing.AsyncTestCase):
 
     @tornado.testing.gen_test
     def test_iostream_closed_on_unbind(self):
-        nc = Client()
+        nc = NatsProtocol()
         yield nc.connect(io_loop=self.io_loop)
         self.assertTrue(nc.is_connected)
         self.assertEqual(nc.stats['reconnects'], 0)
@@ -384,7 +384,7 @@ class ClientTest(tornado.testing.AsyncTestCase):
     @tornado.testing.gen_test
     def test_flusher_exits_on_unbind(self):
 
-        class FlusherClient(Client):
+        class FlusherClient(NatsProtocol):
             def __init__(self, *args, **kwargs):
                 super(FlusherClient, self).__init__(*args, **kwargs)
                 self.flushers_running = {}
@@ -419,12 +419,12 @@ class ClientTest(tornado.testing.AsyncTestCase):
 
     @tornado.testing.gen_test
     def test_subscribe(self):
-        nc = Client()
+        nc = NatsProtocol()
         options = {
             "io_loop": self.io_loop
         }
         yield nc.connect(**options)
-        self.assertEqual(Client.CONNECTED, nc._status)
+        self.assertEqual(NatsProtocol.CONNECTED, nc._status)
         info_keys = nc._server_info.keys()
         self.assertTrue(len(info_keys) > 0)
 
@@ -441,7 +441,7 @@ class ClientTest(tornado.testing.AsyncTestCase):
 
     @tornado.testing.gen_test
     def test_subscribe_sync(self):
-        nc = Client()
+        nc = NatsProtocol()
         msgs = []
 
         @tornado.gen.coroutine
@@ -469,7 +469,7 @@ class ClientTest(tornado.testing.AsyncTestCase):
 
     @tornado.testing.gen_test
     def test_subscribe_sync_non_coro(self):
-        nc = Client()
+        nc = NatsProtocol()
         msgs = []
 
         def subscription_handler(msg):
@@ -495,7 +495,7 @@ class ClientTest(tornado.testing.AsyncTestCase):
 
     @tornado.testing.gen_test
     def test_subscribe_async(self):
-        nc = Client()
+        nc = NatsProtocol()
         msgs = []
 
         @tornado.gen.coroutine
@@ -523,7 +523,7 @@ class ClientTest(tornado.testing.AsyncTestCase):
 
     @tornado.testing.gen_test
     def test_subscribe_async_non_coro(self):
-        nc = Client()
+        nc = NatsProtocol()
         msgs = []
 
         def subscription_handler(msg):
@@ -545,9 +545,9 @@ class ClientTest(tornado.testing.AsyncTestCase):
 
     @tornado.testing.gen_test
     def test_publish(self):
-        nc = Client()
+        nc = NatsProtocol()
         yield nc.connect(io_loop=self.io_loop)
-        self.assertEqual(Client.CONNECTED, nc._status)
+        self.assertEqual(NatsProtocol.CONNECTED, nc._status)
         info_keys = nc._server_info.keys()
         self.assertTrue(len(info_keys) > 0)
 
@@ -577,7 +577,7 @@ class ClientTest(tornado.testing.AsyncTestCase):
         # This tests a race condition fixed in #23 where a series of
         # large publishes followed by a flush and another publish
         # will cause the last publish to never get written.
-        nc = Client()
+        nc = NatsProtocol()
 
         yield nc.connect(io_loop=self.io_loop)
         self.assertTrue(nc.is_connected)
@@ -635,7 +635,7 @@ class ClientTest(tornado.testing.AsyncTestCase):
         # This tests a race condition fixed in #23 where a series of
         # large publishes followed by a flush and another publish
         # will cause the last publish to never get written.
-        nc = Client()
+        nc = NatsProtocol()
 
         yield nc.connect(io_loop=self.io_loop)
         self.assertTrue(nc.is_connected)
@@ -695,7 +695,7 @@ class ClientTest(tornado.testing.AsyncTestCase):
 
     @tornado.testing.gen_test
     def test_unsubscribe(self):
-        nc = Client()
+        nc = NatsProtocol()
         options = {
             "io_loop": self.io_loop
         }
@@ -727,7 +727,7 @@ class ClientTest(tornado.testing.AsyncTestCase):
 
     @tornado.testing.gen_test
     def test_unsubscribe_only_if_max_reached(self):
-        nc = Client()
+        nc = NatsProtocol()
         options = {
             "io_loop": self.io_loop
         }
@@ -762,7 +762,7 @@ class ClientTest(tornado.testing.AsyncTestCase):
 
     @tornado.testing.gen_test
     def test_request(self):
-        nc = Client()
+        nc = NatsProtocol()
         yield nc.connect(io_loop=self.io_loop)
 
         class Component:
@@ -812,7 +812,7 @@ class ClientTest(tornado.testing.AsyncTestCase):
 
     @tornado.testing.gen_test
     def test_timed_request(self):
-        nc = Client()
+        nc = NatsProtocol()
         yield nc.connect(io_loop=self.io_loop)
 
         class Component:
@@ -857,9 +857,9 @@ class ClientTest(tornado.testing.AsyncTestCase):
 
     @tornado.testing.gen_test
     def test_publish_max_payload(self):
-        nc = Client()
+        nc = NatsProtocol()
         yield nc.connect(io_loop=self.io_loop)
-        self.assertEqual(Client.CONNECTED, nc._status)
+        self.assertEqual(NatsProtocol.CONNECTED, nc._status)
         info_keys = nc._server_info.keys()
         self.assertTrue(len(info_keys) > 0)
 
@@ -868,10 +868,10 @@ class ClientTest(tornado.testing.AsyncTestCase):
 
     @tornado.testing.gen_test
     def test_publish_request(self):
-        nc = Client()
+        nc = NatsProtocol()
 
         yield nc.connect(io_loop=self.io_loop)
-        self.assertEqual(Client.CONNECTED, nc._status)
+        self.assertEqual(NatsProtocol.CONNECTED, nc._status)
         info_keys = nc._server_info.keys()
         self.assertTrue(len(info_keys) > 0)
 
@@ -897,7 +897,7 @@ class ClientTest(tornado.testing.AsyncTestCase):
     def test_customize_io_buffers(self):
         class Component():
             def __init__(self):
-                self.nc = Client()
+                self.nc = NatsProtocol()
                 self.errors = []
                 self.disconnected_cb_called = 0
                 self.closed_cb_called = 0
@@ -943,7 +943,7 @@ class ClientTest(tornado.testing.AsyncTestCase):
                 yield self.nc._process_pong()
                 self.t.assertEqual(0, len(self.nc._pongs))
 
-        nc = Client()
+        nc = NatsProtocol()
         nc._ps = Parser(nc, self)
         yield nc.connect(io_loop=self.io_loop)
         yield tornado.gen.sleep(1)
@@ -964,7 +964,7 @@ class ClientTest(tornado.testing.AsyncTestCase):
                     pongs.append(data)
                     yield self.nc._process_pong()
 
-        nc = Client()
+        nc = NatsProtocol()
         nc._ps = Parser(nc)
         yield nc.connect(io_loop=self.io_loop, ping_interval=0.1)
         yield tornado.gen.sleep(1)
@@ -986,7 +986,7 @@ class ClientTest(tornado.testing.AsyncTestCase):
             def parse(self, data=''):
                 pongs.append(data)  # but, don't process now
 
-        nc = Client()
+        nc = NatsProtocol()
         nc._ps = Parser(nc)
         yield nc.connect(io_loop=self.io_loop,
                          ping_interval=0.1,
@@ -1021,7 +1021,7 @@ class ClientTest(tornado.testing.AsyncTestCase):
                 yield tornado.gen.sleep(2.0)
                 yield self.nc._process_pong()
 
-        nc = Client()
+        nc = NatsProtocol()
         nc._ps = Parser(nc, self)
         yield nc.connect(io_loop=self.io_loop)
         with self.assertRaises(tornado.gen.TimeoutError):
@@ -1042,7 +1042,7 @@ class ClientTest(tornado.testing.AsyncTestCase):
                 if not self.drop_messages:
                     yield self.nc._process_pong()
 
-        nc = Client()
+        nc = NatsProtocol()
         nc._ps = Parser(nc)
         yield nc.connect(io_loop=self.io_loop)
         nc._ps.drop_messages = True
@@ -1069,7 +1069,7 @@ class ClientTest(tornado.testing.AsyncTestCase):
             def parse(self, data=''):
                 self.nc._process_pong()
 
-        nc = Client()
+        nc = NatsProtocol()
         nc._ps = Parser(nc, self)
         yield nc.connect(io_loop=self.io_loop)
         with self.assertRaises(tornado.gen.TimeoutError):
@@ -1077,7 +1077,7 @@ class ClientTest(tornado.testing.AsyncTestCase):
 
     @tornado.testing.gen_test
     def test_process_message_subscription_not_present(self):
-        nc = Client()
+        nc = NatsProtocol()
         yield nc._process_msg(387, 'some-subject', 'some-reply', [0, 1, 2])
 
 
@@ -1123,7 +1123,7 @@ class ClientAuthTest(tornado.testing.AsyncTestCase):
 
     @tornado.testing.gen_test(timeout=10)
     def test_auth_connect(self):
-        nc = Client()
+        nc = NatsProtocol()
         options = {
             "dont_randomize": True,
             "servers": [
@@ -1226,7 +1226,7 @@ class ClientAuthTest(tornado.testing.AsyncTestCase):
             def reconnected_cb(self):
                 self.reconnected_cb_called = True
 
-        nc = Client()
+        nc = NatsProtocol()
         component = Component(nc)
         options = {
             "dont_randomize": True,
@@ -1301,7 +1301,7 @@ class ClientAuthTest(tornado.testing.AsyncTestCase):
     @unittest.skip("FIXME: flapping test")
     def test_auth_pending_bytes_handling(self):
         
-        nc = Client()
+        nc = NatsProtocol()
 
         class Component:
 
@@ -1400,7 +1400,7 @@ class ClientAuthTest(tornado.testing.AsyncTestCase):
 
     @tornado.testing.gen_test(timeout=10)
     def test_close_connection(self):
-        nc = Client()
+        nc = NatsProtocol()
         options = {
             "dont_randomize": True,
             "servers": [
@@ -1541,7 +1541,7 @@ class ClientTLSTest(tornado.testing.AsyncTestCase):
             def reconnected_cb(self):
                 self.reconnected_cb_called = True
 
-        nc = Client()
+        nc = NatsProtocol()
         c = Component(nc)
         options = {
             "servers": [
@@ -1605,7 +1605,7 @@ class ClientTLSTest(tornado.testing.AsyncTestCase):
                 self.reconnected_cb_called = True
                 self.reconnected_future.set_result(True)
 
-        nc = Client()
+        nc = NatsProtocol()
         c = Component(nc)
         options = {
             "dont_randomize": True,
@@ -1693,7 +1693,7 @@ class ClientTLSCertsTest(tornado.testing.AsyncTestCase):
 
     @tornado.testing.gen_test(timeout=10)
     def test_tls_verify(self):
-        nc = Client()
+        nc = NatsProtocol()
         c = self.Component(nc)
         options = {
             "servers": [
@@ -1749,7 +1749,7 @@ class ClientTLSCertsTest(tornado.testing.AsyncTestCase):
 
     @tornado.testing.gen_test(timeout=10)
     def test_tls_verify_short_timeout_no_servers_available(self):
-        nc = Client()
+        nc = NatsProtocol()
         c = self.Component(nc)
         options = {
             "servers": [
@@ -1790,7 +1790,7 @@ class ClientTLSCertsTest(tornado.testing.AsyncTestCase):
 
     @tornado.testing.gen_test(timeout=10)
     def test_tls_verify_fails(self):
-        nc = Client()
+        nc = NatsProtocol()
         c = self.Component(nc)
         port = 4447
         http_port = 8447
@@ -1878,7 +1878,7 @@ class ClientConnectTest(tornado.testing.AsyncTestCase):
         # Start mock TCP Server
         server = LargeControlLineNATSServer(io_loop=self.io_loop)
         server.listen(4229)
-        nc = Client()
+        nc = NatsProtocol()
         options = {
             "dont_randomize": True,
             "servers": [
@@ -1895,7 +1895,7 @@ class ClientConnectTest(tornado.testing.AsyncTestCase):
         # Start mock TCP Server
         server = ShortControlLineNATSServer(io_loop=self.io_loop)
         server.listen(4229)
-        nc = Client()
+        nc = NatsProtocol()
         options = {
             "dont_randomize": True,
             "servers": [
@@ -1927,7 +1927,7 @@ class ClientClusteringDiscoveryTest(tornado.testing.AsyncTestCase):
         }
         """
 
-        nc = Client()
+        nc = NatsProtocol()
         options = {
             "servers": [
                 "nats://127.0.0.1:4222"
@@ -1979,7 +1979,7 @@ class ClientClusteringDiscoveryTest(tornado.testing.AsyncTestCase):
         }
         """
 
-        nc = Client()
+        nc = NatsProtocol()
         options = {
             "servers": [
                 "nats://127.0.0.1:4222"

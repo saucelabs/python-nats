@@ -16,7 +16,7 @@
 import tornado.ioloop
 import tornado.gen
 from datetime import timedelta
-from nats.io.client import Client as NATS
+from nats.io.client import NatsProtocol as NATS
 from nats.io.errors import ErrConnectionClosed
 
 @tornado.gen.coroutine

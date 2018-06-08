@@ -17,7 +17,8 @@ NATS network protocol parser.
 """
 
 import re
-import tornado.gen
+from twisted.internet.defer import inlineCallbacks
+
 
 MSG_RE  = re.compile(b'\AMSG\s+([^\s]+)\s+([^\s]+)\s+(([^\s]+)[^\S\r\n]+)?(\d+)\r\n')
 OK_RE   = re.compile(b'\A\+OK\s*\r\n')
@@ -70,7 +71,7 @@ class Parser(object):
         self.needed = 0
         self.msg_arg = {}
 
-    @tornado.gen.coroutine
+    @inlineCallbacks
     def parse(self, data=b''):
         """
         Parses the wire protocol from NATS for the client
@@ -118,7 +119,7 @@ class Parser(object):
                 pong = PONG_RE.match(self.buf)
                 if pong:
                     del self.buf[:pong.end()]
-                    yield self.nc._process_pong()
+                    self.nc._process_pong()
                     continue
 
                 info = INFO_RE.match(self.buf)
