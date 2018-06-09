@@ -156,13 +156,8 @@ class NatsProtocol(Protocol):
         self._ps.parse(data)
 
     def connectionMade(self):
-        self._status = NatsProtocol.CONNECTED
-
-        self._flusher_loop()
-
-        # Prepare the ping pong interval.
-        self._ping_timer = task.LoopingCall(self._send_ping)
-        self._ping_timer.start(self.options["ping_interval"])
+        # We aren't officially connected yet until the INFO server msg has been processed
+        self._status = NatsProtocol.CONNECTING
 
     def connectionLost(self, reason=connectionDone):
         self._status = NatsProtocol.DISCONNECTED
@@ -625,76 +620,85 @@ class NatsProtocol(Protocol):
         elif sub.future is not None:
             sub.future.callback(msg)
 
-    @inlineCallbacks
     def _process_connect_init(self):
         """
         Handles the initial part of the NATS protocol, moving from
         the (RE)CONNECTING to CONNECTED states when establishing
         a connection with the server.
         """
-        # INFO {...}
-        line = yield self.io.read_until(_CRLF_, max_bytes=None)
-        _, args = line.split(INFO_OP + _SPC_, 1)
-        self._server_info = json.loads(args)
-        self._max_payload_size = self._server_info["max_payload"]
-
-        # Check whether we need to upgrade to TLS first of all
-        if self._server_info['tls_required']:
-            # Detach and prepare for upgrading the TLS connection.
-            self._loop.remove_handler(self._socket.fileno())
-
-            tls_opts = {}
-            if "tls" in self.options:
-                # Allow customizing the TLS version though default
-                # to one that the server supports at least.
-                tls_opts = self.options["tls"]
-
-            # Rewrap using a TLS connection, can't do handshake on connect
-            # as the socket is non blocking.
-            self._socket = ssl.wrap_socket(
-                self._socket,
-                do_handshake_on_connect=False,
-                **tls_opts)
-
-            # Use the TLS stream instead from now
-            self.io = tornado.iostream.SSLIOStream(
-                self._socket, io_loop=self._loop)
-
-            self.io.set_close_callback(self._unbind)
-            self.io._do_ssl_handshake()
-
-        # CONNECT {...}
         cmd = self.connect_command()
-        yield self.io.write(cmd)
+        self.transport.write(cmd)
 
-        # Refresh state of the parser upon reconnect.
-        if self.is_reconnecting:
-            self._ps.reset()
+        # Only now are we officially connected
+        self._status = NatsProtocol.CONNECTED
+        self._flusher_loop()
 
-        # Send a PING expecting a PONG to make a roundtrip to the server
-        # and assert that sent messages sent this far have been processed.
-        yield self.io.write(PING_PROTO)
-
-        # FIXME: Add readline timeout for these.
-        next_op = yield self.io.read_until(_CRLF_, max_bytes=MAX_CONTROL_LINE_SIZE)
-        if self.options["verbose"] and OK_OP in next_op:
-            next_op = yield self.io.read_until(_CRLF_, max_bytes=MAX_CONTROL_LINE_SIZE)
-        if ERR_OP in next_op:
-            err_line = next_op.decode()
-            _, err_msg = err_line.split(_SPC_, 1)
-            # FIXME: Maybe handling could be more special here,
-            # checking for ErrAuthorization for example.
-            # yield from self._process_err(err_msg)
-            raise NatsError("nats: "+err_msg.rstrip('\r\n'))
-
-        if PONG_PROTO in next_op:
-            self._status = NatsProtocol.CONNECTED
-
-        # Queue and flusher for coalescing writes to the server.
-        # self._flush_queue = tornado.queues.Queue(maxsize=1024)
-        self._flush_queue = Queue(maxsize=1024)
-        threads.deferToThread(self._flusher_loop)
-        # self._loop.spawn_callback(self._flusher_loop)
+        # Prepare the ping pong interval.
+        self._ping_timer = task.LoopingCall(self._send_ping)
+        self._ping_timer.start(self.options["ping_interval"])
+        # # INFO {...}
+        # line = yield self.io.read_until(_CRLF_, max_bytes=None)
+        # _, args = line.split(INFO_OP + _SPC_, 1)
+        # self._server_info = json.loads(args)
+        # self._max_payload_size = self._server_info["max_payload"]
+        #
+        # # Check whether we need to upgrade to TLS first of all
+        # if self._server_info['tls_required']:
+        #     # Detach and prepare for upgrading the TLS connection.
+        #     self._loop.remove_handler(self._socket.fileno())
+        #
+        #     tls_opts = {}
+        #     if "tls" in self.options:
+        #         # Allow customizing the TLS version though default
+        #         # to one that the server supports at least.
+        #         tls_opts = self.options["tls"]
+        #
+        #     # Rewrap using a TLS connection, can't do handshake on connect
+        #     # as the socket is non blocking.
+        #     self._socket = ssl.wrap_socket(
+        #         self._socket,
+        #         do_handshake_on_connect=False,
+        #         **tls_opts)
+        #
+        #     # Use the TLS stream instead from now
+        #     self.io = tornado.iostream.SSLIOStream(
+        #         self._socket, io_loop=self._loop)
+        #
+        #     self.io.set_close_callback(self._unbind)
+        #     self.io._do_ssl_handshake()
+        #
+        # # CONNECT {...}
+        # cmd = self.connect_command()
+        # yield self.io.write(cmd)
+        #
+        # # Refresh state of the parser upon reconnect.
+        # if self.is_reconnecting:
+        #     self._ps.reset()
+        #
+        # # Send a PING expecting a PONG to make a roundtrip to the server
+        # # and assert that sent messages sent this far have been processed.
+        # yield self.io.write(PING_PROTO)
+        #
+        # # FIXME: Add readline timeout for these.
+        # next_op = yield self.io.read_until(_CRLF_, max_bytes=MAX_CONTROL_LINE_SIZE)
+        # if self.options["verbose"] and OK_OP in next_op:
+        #     next_op = yield self.io.read_until(_CRLF_, max_bytes=MAX_CONTROL_LINE_SIZE)
+        # if ERR_OP in next_op:
+        #     err_line = next_op.decode()
+        #     _, err_msg = err_line.split(_SPC_, 1)
+        #     # FIXME: Maybe handling could be more special here,
+        #     # checking for ErrAuthorization for example.
+        #     # yield from self._process_err(err_msg)
+        #     raise NatsError("nats: "+err_msg.rstrip('\r\n'))
+        #
+        # if PONG_PROTO in next_op:
+        #     self._status = NatsProtocol.CONNECTED
+        #
+        # # Queue and flusher for coalescing writes to the server.
+        # # self._flush_queue = tornado.queues.Queue(maxsize=1024)
+        # self._flush_queue = Queue(maxsize=1024)
+        # threads.deferToThread(self._flusher_loop)
+        # # self._loop.spawn_callback(self._flusher_loop)
 
     def _process_info(self, info_line):
         """
@@ -703,8 +707,8 @@ class NatsProtocol(Protocol):
         """
         info = json.loads(info_line.decode())
 
-        cmd = self.connect_command()
-        self.transport.write(cmd)
+        if not self.is_connected:
+            self._process_connect_init()
 
         # TODO pass the URLs back to the factory
         if 'connect_urls' in info:
@@ -915,7 +919,6 @@ class NatsProtocol(Protocol):
             pending = []
             pending_size = 0
             try:
-                # TODO I'd rather utilize the DeferredQueue by putting msgs in there, instead of a separate buffer
                 # Block and wait for the flusher to be kicked
                 yield self._flush_queue.get()
 
