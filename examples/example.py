@@ -23,7 +23,7 @@ from datetime import datetime
 
 from twisted.internet import reactor, protocol, defer, task
 from twisted.internet.defer import inlineCallbacks, returnValue
-from twisted.internet.error import TimeoutError
+from twisted.internet.error import TimeoutError, ConnectionRefusedError
 
 from nats.io.utils import new_inbox
 from nats.io.client import NatsProtocol as NATS, NatsClientFactory, NatsClient
@@ -33,7 +33,12 @@ from nats.io.client import NatsProtocol as NATS, NatsClientFactory, NatsClient
 def main():
     try:
         nc = NatsClient()
-        yield nc.connect("localhost", 4222)
+        try:
+            yield nc.connect("localhost", 4222)
+        except ConnectionRefusedError, e:
+            print "Failed to establish connection"
+            reactor.stop()
+            return
         # ncf = NatsClientFactory(host="localhost", port=4222)
         # nc = yield ncf.connect()
         # nc = yield reactor.connectTCP("localhost", 4222, ncf)
@@ -72,7 +77,7 @@ def main():
         yield nc.subscribe("help", "workers", help_request_handler)
 
         try:
-            response = yield nc.timed_request("help", "Hi, need help!", timeout=0.5)
+            response = yield nc.timed_request("help", "Hi, need help!", timeout=3)
             print("[Timed Response]: %s" % response.data)
         except TimeoutError, e:
             print("Timeout! Need to retry...")
@@ -97,7 +102,10 @@ def main():
 
 @inlineCallbacks
 def looping_publisher(nc):
-    yield nc.publish("looper", "iLoop " + str(random.randint(0, 100)))
+    try:
+        yield nc.publish("looper", "iLoop " + str(random.randint(0, 100)))
+    except Exception, e:
+        print "Failed to publish message: %r", e
 
 
 if __name__ == '__main__':

@@ -97,12 +97,13 @@ class NatsProtocol(Protocol):
         return "<nats client v{}>".format(__version__)
 
     def __init__(self, verbose=False, pedantic=False, name=None, dont_randomize=False,
-                 ping_interval=DEFAULT_PING_INTERVAL, max_outstanding_pings=MAX_OUTSTANDING_PINGS):
+                 ping_interval=DEFAULT_PING_INTERVAL, max_outstanding_pings=MAX_OUTSTANDING_PINGS,
+                 max_payload=DEFAULT_MAX_PAYLOAD_SIZE):
         self.options = {}
 
         # INFO that we get upon connect from the server.
         self._server_info = {}
-        self._max_payload_size = DEFAULT_MAX_PAYLOAD_SIZE
+        self._max_payload_size = max_payload
 
         # Client connection state and clustering.
         self.io = None
@@ -324,13 +325,13 @@ class NatsProtocol(Protocol):
             self._pongs.append(future)
 
     def connect_command(self):
-        '''
+        """
         Generates a JSON string with the params to be used
         when sending CONNECT to the server.
 
           ->> CONNECT {"verbose": false, "pedantic": false, "lang": "python2" }
 
-        '''
+        """
         options = {
             "verbose":  self.options["verbose"],
             "pedantic": self.options["pedantic"],
@@ -411,7 +412,6 @@ class NatsProtocol(Protocol):
         if self.is_closed:
             raise ErrConnectionClosed
         yield self._publish(subject, reply, payload, payload_size)
-        # if self._flush_queue.empty():
         yield self._flush_pending()
 
     @inlineCallbacks
@@ -1006,6 +1006,8 @@ class Srv(object):
 
 class NatsClientFactory(ReconnectingClientFactory):
 
+    protocol = NatsProtocol
+
     def __init__(self, host, port, connect_timeout=DEFAULT_CONNECT_TIMEOUT):
         self.options = {}
         self.host = host
@@ -1014,9 +1016,8 @@ class NatsClientFactory(ReconnectingClientFactory):
         self.options["connect_timeout"] = connect_timeout
         self.deferred = defer.Deferred()
 
-    protocol = NatsProtocol
-
     def buildProtocol(self, addr):
+        log.info("building...")
         self.resetDelay()
 
         self.client = self.protocol()
