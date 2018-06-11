@@ -413,7 +413,6 @@ class NatsProtocol(Protocol):
         yield self._publish(subject, reply, payload, payload_size)
         yield self._flush_pending()
 
-    @inlineCallbacks
     def flush(self, timeout=60):
         """
         Flush will perform a round trip to the server and return True
@@ -421,9 +420,8 @@ class NatsProtocol(Protocol):
         """
         if self.is_closed:
             raise ErrConnectionClosed
-        yield self._flush_timeout(timeout)
+        return self._flush_timeout(timeout)
 
-    @inlineCallbacks
     def _flush_timeout(self, timeout):
         """
         Takes a timeout and sets up a future which will return True
@@ -431,9 +429,8 @@ class NatsProtocol(Protocol):
         """
         future = defer.Deferred()
         future.addTimeout(timeout, reactor)
-        yield self._send_ping(future)
-        result = yield future
-        returnValue(result)
+        self._send_ping(future)
+        return future
 
     @inlineCallbacks
     def request(self, subject, payload, expected=1, cb=None):
@@ -568,24 +565,17 @@ class NatsProtocol(Protocol):
         """
         yield self.send_command(PONG_PROTO)
 
-    # @inlineCallbacks
     def _process_pong(self):
         """
         The client will send a PING soon after CONNECT and then periodically
         to the server as a failure detector to close connections to unhealthy servers.
         For each PING the client sends, we will add a respective PONG future.
-        Here we want to find the oldest PONG future that is still running.  If the
-        flush PING-PONG already timed out, then just drop those old items.
         """
-        # FIXME we really only need to track one ping-pong at a time and not all of them
         while len(self._pongs) > 0:
             future = self._pongs.pop(0)
-            self._pings_outstanding -= 1  # FIXME missing PONGs over a long time can acculumate and force a client to disconnect
-            # Only exit loop if future still running (hasn't exceeded flush timeout).
-            future.callback(True)  # FIXME seems like a useless callback to me
-            # if future.running():
-            #     future.set_result(True)
-            #     break
+            self._pings_outstanding = 0
+            if not future.called:
+                future.callback(True)
 
     @inlineCallbacks
     def _process_msg(self, sid, subject, reply, data):

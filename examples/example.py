@@ -57,6 +57,9 @@ def main():
         def loop_cb(msg=None):
             print("[Loop Received]: %s" % msg.data)
 
+        flushed = yield nc.flush(3)
+        assert flushed
+
         sid = yield nc.subscribe("discover", "", discover)
 
         # Only interested in 2 messages.
