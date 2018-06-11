@@ -138,7 +138,6 @@ class NatsProtocol(Protocol):
         # Ping interval to disconnect from unhealthy servers.
         self._ping_timer = None
         self._pings_outstanding = 0
-        self._pongs_received = 0
         self._pongs = []
 
         self._error_cb = None
@@ -581,7 +580,6 @@ class NatsProtocol(Protocol):
         # FIXME we really only need to track one ping-pong at a time and not all of them
         while len(self._pongs) > 0:
             future = self._pongs.pop(0)
-            self._pongs_received += 1  # FIXME this is only being tracked for testing?
             self._pings_outstanding -= 1  # FIXME missing PONGs over a long time can acculumate and force a client to disconnect
             # Only exit loop if future still running (hasn't exceeded flush timeout).
             future.callback(True)  # FIXME seems like a useless callback to me
@@ -605,7 +603,7 @@ class NatsProtocol(Protocol):
         # Don't process the message if the subscription has been removed
         sub = self._subs.get(sid)
         if sub is None:
-            returnValue()
+            returnValue(True)
         sub.received += 1
 
         if 0 < sub.max_msgs <= sub.received:
@@ -960,7 +958,7 @@ class NatsProtocol(Protocol):
             yield task.deferLater(reactor, 0, lambda: None)
 
 
-class Subscription():
+class Subscription(object):
 
     def __init__(self,
                  subject='',
