@@ -499,24 +499,6 @@ class NatsProtocol(Protocol):
                 for srv in connect_urls:
                     self._server_pool.append(srv)
 
-    def _next_server(self):
-        """
-        Chooses next available server to connect.
-        """
-        if self.options["dont_randomize"]:
-            server = self._server_pool.pop(0)
-            self._server_pool.append(server)
-        else:
-            shuffle(self._server_pool)
-
-        s = None
-        for server in self._server_pool:
-            if self.options["max_reconnect_attempts"] > 0 and (server.reconnects > self.options["max_reconnect_attempts"]):
-                continue
-            else:
-                s = server
-        return s
-
     @property
     def is_closed(self):
         return self._status == NatsProtocol.CLOSED
@@ -649,12 +631,6 @@ class NatsProtocol(Protocol):
                     self._pending, pending = [], self._pending
                     self._pending_size, pending_size = 0, self._pending_size
                     self.transport.write(cmds)
-
-            # except tornado.iostream.StreamBufferFullError:
-                # Acumulate as pending data size and flush when possible.
-                # self._pending = pending + self._pending
-                # self._pending_size += pending_size
-            # except tornado.iostream.StreamClosedError as e:
             except Exception as e:
                 self._pending = pending + self._pending
                 self._pending_size += pending_size
