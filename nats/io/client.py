@@ -316,8 +316,8 @@ class NatsProtocol(Protocol):
         if self._pings_outstanding > self.options["max_outstanding_pings"]:
             yield self._unbind()
         else:
-            yield self.send_command(PING_PROTO)
-            yield self._flush_pending()
+            self.send_command(PING_PROTO)
+            self._flush_pending()
             if future is None:
                 future = defer.Deferred()
             self._pings_outstanding += 1
@@ -353,7 +353,6 @@ class NatsProtocol(Protocol):
         args = json.dumps(options, sort_keys=True)
         return CONNECT_PROTO.format(CONNECT_OP, args, _CRLF_)
 
-    @inlineCallbacks
     def send_command(self, cmd, priority=False):
         """
         Flushes a command to the server as a bytes payload.
@@ -365,24 +364,21 @@ class NatsProtocol(Protocol):
         self._pending_size += len(cmd)
 
         if self._pending_size > DEFAULT_PENDING_SIZE:
-            yield self._flush_pending()
+            self._flush_pending()
 
-    @inlineCallbacks
     def _publish(self, subject, reply, payload, payload_size):
         payload_size_bytes = ("%d" % payload_size).encode()
         pub_cmd = b''.join([PUB_OP, _SPC_, subject.encode(
         ), _SPC_, reply, _SPC_, payload_size_bytes, _CRLF_, payload, _CRLF_])
         self.stats['out_msgs'] += 1
         self.stats['out_bytes'] += payload_size
-        yield self.send_command(pub_cmd)
+        self.send_command(pub_cmd)
 
-    @inlineCallbacks
     def _flush_pending(self, check_connected=True):
         if not self.is_connected and check_connected:
             return
-        yield self._flush_queue.put(None)
+        self._flush_queue.put(None)
 
-    @inlineCallbacks
     def publish(self, subject, payload):
         """
         Sends a PUB command to the server on the specified subject.
@@ -392,9 +388,8 @@ class NatsProtocol(Protocol):
           <<- MSG hello 2 5
 
         """
-        yield self.publish_request(subject, _EMPTY_, payload)
+        self.publish_request(subject, _EMPTY_, payload)
 
-    @inlineCallbacks
     def publish_request(self, subject, reply, payload):
         """
         Publishes a message tagging it with a reply subscription
@@ -410,8 +405,8 @@ class NatsProtocol(Protocol):
             raise ErrMaxPayload
         if self.is_closed:
             raise ErrConnectionClosed
-        yield self._publish(subject, reply, payload, payload_size)
-        yield self._flush_pending()
+        self._publish(subject, reply, payload, payload_size)
+        self._flush_pending()
 
     def flush(self, timeout=60):
         """
@@ -432,7 +427,6 @@ class NatsProtocol(Protocol):
         self._send_ping(future)
         return future
 
-    @inlineCallbacks
     def request(self, subject, payload, expected=1, cb=None):
         """
         Implements the request/response pattern via pub/sub
@@ -449,10 +443,10 @@ class NatsProtocol(Protocol):
         next_inbox = INBOX_PREFIX[:]
         next_inbox.extend(self._nuid.next())
         inbox = str(next_inbox)
-        sid = yield self.subscribe(inbox, _EMPTY_, cb)
-        yield self.auto_unsubscribe(sid, expected)
-        yield self.publish_request(subject, inbox, payload)
-        returnValue(sid)
+        sid = self.subscribe(inbox, _EMPTY_, cb)
+        self.auto_unsubscribe(sid, expected)
+        self.publish_request(subject, inbox, payload)
+        return sid
 
     @inlineCallbacks
     def timed_request(self, subject, payload, timeout=1):
@@ -474,13 +468,12 @@ class NatsProtocol(Protocol):
         inbox = str(next_inbox)
         future = defer.Deferred()
         future.addTimeout(timeout, reactor)
-        sid = yield self.subscribe(subject=inbox, queue=_EMPTY_, cb=None, future=future, max_msgs=1)
-        yield self.auto_unsubscribe(sid, 1)
-        yield self.publish_request(subject, inbox, payload)
+        sid = self.subscribe(subject=inbox, queue=_EMPTY_, cb=None, future=future, max_msgs=1)
+        self.auto_unsubscribe(sid, 1)
+        self.publish_request(subject, inbox, payload)
         msg = yield future
         returnValue(msg)
 
-    @inlineCallbacks
     def subscribe(self, subject="", queue="", cb=None, future=None, max_msgs=0):
         """
         Sends a SUB command to the server. Takes a queue parameter which can be used
@@ -500,10 +493,9 @@ class NatsProtocol(Protocol):
             max_msgs=max_msgs,
         )
         self._subs[sid] = sub
-        yield self._subscribe(sub, sid)
-        returnValue(sid)
+        self._subscribe(sub, sid)
+        return sid
 
-    @inlineCallbacks
     def unsubscribe(self, ssid, max_msgs=0):
         """
         Takes a subscription sequence id and removes the subscription
@@ -529,19 +521,17 @@ class NatsProtocol(Protocol):
         # We will send these for all subs when we reconnect anyway,
         # so that we can suppress here.
         if not self.is_reconnecting:
-            yield self.auto_unsubscribe(ssid, max_msgs)
+            self.auto_unsubscribe(ssid, max_msgs)
 
-    @inlineCallbacks
     def _subscribe(self, sub, ssid):
         """
         Generates a SUB command given a Subscription and the subject sequence id.
         """
         sub_cmd = b''.join([SUB_OP, _SPC_, sub.subject.encode(
         ), _SPC_, sub.queue.encode(), _SPC_, ("%d" % ssid).encode(), _CRLF_])
-        yield self.send_command(sub_cmd)
-        yield self._flush_pending()
+        self.send_command(sub_cmd)
+        self._flush_pending()
 
-    @inlineCallbacks
     def auto_unsubscribe(self, sid, limit=1):
         """
         Sends an UNSUB command to the server.  Unsubscribe is one of the basic building
@@ -553,10 +543,9 @@ class NatsProtocol(Protocol):
             b_limit = ("%d" % limit).encode()
         b_sid = ("%d" % sid).encode()
         unsub_cmd = b''.join([UNSUB_OP, _SPC_, b_sid, _SPC_, b_limit, _CRLF_])
-        yield self.send_command(unsub_cmd)
-        yield self._flush_pending()
+        self.send_command(unsub_cmd)
+        self._flush_pending()
 
-    @inlineCallbacks
     def _process_ping(self):
         """
         The server will be periodically sending a PING, and if the the client
@@ -754,7 +743,6 @@ class NatsProtocol(Protocol):
     def is_connecting(self):
         return self._status == NatsProtocol.CONNECTING
 
-    @inlineCallbacks
     def _unbind(self):
         """
         Unbind handles the disconnection from the server then
@@ -766,8 +754,8 @@ class NatsProtocol(Protocol):
         if self._disconnected_cb is not None:
             self._disconnected_cb()
 
-        yield self._process_disconnect() # TODO not sure if this is necessary
-        yield self._end_flusher_loop()
+        self._process_disconnect()
+        self._end_flusher_loop()
 
     @inlineCallbacks
     def _schedule_primary_and_connect(self):
@@ -813,22 +801,19 @@ class NatsProtocol(Protocol):
                 self._status = NatsProtocol.RECONNECTING
                 continue
 
-    @inlineCallbacks
     def _process_disconnect(self):
         """
         Does cleanup of the client state and tears down the connection.
         """
         self._status = NatsProtocol.DISCONNECTED
-        yield self.close()
+        self.close()
 
-    @inlineCallbacks
     def close(self):
         """
         Wraps up connection to the NATS cluster and stops reconnecting.
         """
         yield self._close(NatsProtocol.CLOSED)
 
-    @inlineCallbacks
     def _close(self, status, do_callbacks=True):
         """
         Takes the status on which it should leave the connection
@@ -844,16 +829,12 @@ class NatsProtocol(Protocol):
         if self._ping_timer is not None and self._ping_timer.is_running():
             self._ping_timer.stop()
 
-        if not self.io.closed():
-            self.io.close()
-
         if do_callbacks:
             if self._disconnected_cb is not None:
                 self._disconnected_cb()
             if self._close_cb is not None:
                 self._close_cb()
 
-    @inlineCallbacks
     def _process_err(self, err=None):
         """
         Stores the last received error from the server and dispatches the error callback.
@@ -911,7 +892,6 @@ class NatsProtocol(Protocol):
                 yield self._flush_queue.get()
 
                 # Check whether we should bail first
-                # if not self.is_connected or self.is_connecting or self.io.closed():
                 if not self.is_connected or self.is_connecting:
                     break
 
@@ -935,17 +915,15 @@ class NatsProtocol(Protocol):
                 self._err = e
                 if self._error_cb is not None and not self.is_reconnecting:
                     self._error_cb(e)
-                yield self._unbind()
+                self._unbind()
 
-    @inlineCallbacks
     def _end_flusher_loop(self):
         """
         Let flusher_loop coroutine quit - useful when disconnecting.
         """
         if not self.is_connected or self.is_connecting:
             if self._flush_queue is not None:
-                yield self._flush_pending(check_connected=False)
-            yield task.deferLater(reactor, 0, lambda: None)
+                self._flush_pending(check_connected=False)
 
 
 class Subscription(object):
