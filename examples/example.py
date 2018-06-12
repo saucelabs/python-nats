@@ -99,16 +99,28 @@ def main():
         yield nc.subscribe("looper", "", loop_cb)
         loop = task.LoopingCall(looping_publisher, nc)
         loop.start(2)
+
+        loop_sub = task.LoopingCall(looping_subscriber, nc)
+        loop_sub.start(2)
     except Exception, e:
         traceback.print_exc()
 
 
-@inlineCallbacks
 def looping_publisher(nc):
     try:
-        yield nc.publish("looper", "iLoop " + str(random.randint(0, 100)))
+        nc.publish("looper", "iLoop " + str(random.randint(0, 100)))
     except Exception, e:
         print "Failed to publish message: %r", e
+
+
+def looping_subscriber(nc):
+    try:
+        def loop_sub_handler(msg):
+            print("[Loop Request Handler Received]: %s" % msg.data)
+
+        nc.subscribe("looper", "", loop_sub_handler, max_msgs=1)
+    except Exception, e:
+        print "Failed to subscribe: %r", e
 
 
 if __name__ == '__main__':

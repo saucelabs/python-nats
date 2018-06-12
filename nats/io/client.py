@@ -106,7 +106,6 @@ class NatsProtocol(Protocol):
         self._max_payload_size = max_payload
 
         # Client connection state and clustering.
-        self.io = None
         self._socket = None
         self._status = NatsProtocol.DISCONNECTED
         self._server_pool = []
@@ -164,152 +163,6 @@ class NatsProtocol(Protocol):
         self._ping_timer.stop()
         self._end_flusher_loop()
         # TODO probably need something like reason.throwExceptionIntoGenerator() for error callbacks
-        # self._err = e
-        # if self._error_cb is not None and not self.is_reconnecting and not self.is_closed:
-        #     self._error_cb(e)
-
-    @inlineCallbacks
-    def connect(self,
-                servers=[],
-                verbose=False,
-                pedantic=False,
-                name=None,
-                ping_interval=DEFAULT_PING_INTERVAL,
-                max_outstanding_pings=MAX_OUTSTANDING_PINGS,
-                dont_randomize=False,
-                allow_reconnect=True,
-                close_cb=None,
-                error_cb=None,
-                disconnected_cb=None,
-                reconnected_cb=None,
-                io_loop=None,
-                max_read_buffer_size=DEFAULT_READ_BUFFER_SIZE,
-                max_write_buffer_size=DEFAULT_WRITE_BUFFER_SIZE,
-                read_chunk_size=DEFAULT_READ_CHUNK_SIZE,
-                tcp_nodelay=False,
-                connect_timeout=DEFAULT_CONNECT_TIMEOUT,
-                max_reconnect_attempts=MAX_RECONNECT_ATTEMPTS,
-                reconnect_time_wait=RECONNECT_TIME_WAIT,
-                tls=None
-                ):
-        """
-        Establishes a connection to a NATS server.
-
-        Examples:
-
-          # Configure pool of NATS servers.
-          nc = nats.io.client.Client()
-          yield nc.connect({ 'servers': ['nats://192.168.1.10:4222', 'nats://192.168.2.10:4222'] })
-
-          # User and pass are to be passed on the uri to authenticate.
-          yield nc.connect({ 'servers': ['nats://hello:world@192.168.1.10:4222'] })
-
-        """
-        self.options["servers"] = servers
-        self.options["verbose"] = verbose
-        self.options["pedantic"] = pedantic
-        self.options["name"] = name
-        self.options["max_outstanding_pings"] = max_outstanding_pings
-        self.options["max_reconnect_attempts"] = max_reconnect_attempts
-        self.options["reconnect_time_wait"] = reconnect_time_wait
-        self.options["dont_randomize"] = dont_randomize
-        self.options["allow_reconnect"] = allow_reconnect
-        self.options["tcp_nodelay"] = tcp_nodelay
-
-        # In seconds
-        self.options["connect_timeout"] = connect_timeout
-        self.options["ping_interval"] = ping_interval
-
-        # TLS customizations
-        if tls is not None:
-            self.options["tls"] = tls
-
-        self._close_cb = close_cb
-        self._error_cb = error_cb
-        self._disconnected_cb = disconnected_cb
-        self._reconnected_cb = reconnected_cb
-        # self._loop = io_loop if io_loop else tornado.ioloop.IOLoop.instance()
-        self._loop = io_loop if io_loop else reactor
-        self._max_read_buffer_size = max_read_buffer_size
-        self._max_write_buffer_size = max_write_buffer_size
-        self._read_chunk_size = read_chunk_size
-
-        if len(self.options["servers"]) < 1:
-            srv = Srv(urlparse("nats://127.0.0.1:4222"))
-            self._server_pool.append(srv)
-        else:
-            for srv in self.options["servers"]:
-                self._server_pool.append(Srv(urlparse(srv)))
-
-        while True:
-            try:
-                s = self._next_server()
-                if s is None:
-                    raise ErrNoServers
-
-                # Check when was the last attempt and back off before reconnecting
-                if s.last_attempt is not None:
-                    now = time.time()
-                    if (now - s.last_attempt) < self.options["reconnect_time_wait"]:
-                        yield sleep(self.options["reconnect_time_wait"])
-
-                # Mark that we have attempted to connect
-                s.reconnects += 1
-                s.last_attempt = time.time()
-                # yield self._server_connect(s)
-                self._server_connect(s)
-                self._current_server = s
-                s.did_connect = True
-
-                # Established TCP connection at least and about
-                # to send connect command, which might not succeed
-                # in case TLS required and handshake failed.
-                self._status = NatsProtocol.CONNECTING
-                yield self._process_connect_init()
-                self.io.set_close_callback(self._unbind)
-                break
-            except (socket.error, tornado.iostream.StreamClosedError) as e:
-                self._status = NatsProtocol.DISCONNECTED
-                self._err = e
-                if self._error_cb is not None:
-                    self._error_cb(ErrServerConnect(e))
-                if not self.options["allow_reconnect"]:
-                    raise ErrNoServers
-
-        # Flush pending data before continuing in connected status.
-        # FIXME: Could use future here and wait for an error result
-        # to bail earlier in case there are errors in the connection.
-        yield self._flush_pending()
-
-        # First time connecting to NATS so if there were no errors,
-        # we can consider to be connected at this point.
-        self._status = NatsProtocol.CONNECTED
-
-    @inlineCallbacks
-    def _server_connect(self, s):
-        """
-        Sets up a TCP connection to the server.
-        """
-        # self._socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        # self._socket.setblocking(0)
-        # self._socket.settimeout(1.0)
-        #
-        # if self.options["tcp_nodelay"]:
-        #     self._socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
-
-        self.connector = reactor.connectTCP(s.uri.hostname, s.uri.port, self,
-                                            timeout=1)
-        # self.io = tornado.iostream.IOStream(
-        #     self._socket,
-        #     max_buffer_size=self._max_read_buffer_size,
-        #     max_write_buffer_size=self._max_write_buffer_size,
-        #     read_chunk_size=self._read_chunk_size)
-
-        # Connect to server with a deadline
-        # future = self.io.connect((s.uri.hostname, s.uri.port))
-        # yield tornado.gen.with_timeout(
-        #     timedelta(seconds=self.options["connect_timeout"]),
-        #     future)
 
     @inlineCallbacks
     def _send_ping(self, future=None):
@@ -339,7 +192,7 @@ class NatsProtocol(Protocol):
             "protocol": PROTOCOL
         }
         if "auth_required" in self._server_info:
-            if self._server_info["auth_required"] == True:
+            if self._server_info["auth_required"]:
                 # In case there is no password, then consider handle
                 # sending a token instead.
                 if self._current_server.uri.password is None:
@@ -613,69 +466,6 @@ class NatsProtocol(Protocol):
         # Prepare the ping pong interval.
         self._ping_timer = task.LoopingCall(self._send_ping)
         self._ping_timer.start(self.options["ping_interval"])
-        # # INFO {...}
-        # line = yield self.io.read_until(_CRLF_, max_bytes=None)
-        # _, args = line.split(INFO_OP + _SPC_, 1)
-        # self._server_info = json.loads(args)
-        # self._max_payload_size = self._server_info["max_payload"]
-        #
-        # # Check whether we need to upgrade to TLS first of all
-        # if self._server_info['tls_required']:
-        #     # Detach and prepare for upgrading the TLS connection.
-        #     self._loop.remove_handler(self._socket.fileno())
-        #
-        #     tls_opts = {}
-        #     if "tls" in self.options:
-        #         # Allow customizing the TLS version though default
-        #         # to one that the server supports at least.
-        #         tls_opts = self.options["tls"]
-        #
-        #     # Rewrap using a TLS connection, can't do handshake on connect
-        #     # as the socket is non blocking.
-        #     self._socket = ssl.wrap_socket(
-        #         self._socket,
-        #         do_handshake_on_connect=False,
-        #         **tls_opts)
-        #
-        #     # Use the TLS stream instead from now
-        #     self.io = tornado.iostream.SSLIOStream(
-        #         self._socket, io_loop=self._loop)
-        #
-        #     self.io.set_close_callback(self._unbind)
-        #     self.io._do_ssl_handshake()
-        #
-        # # CONNECT {...}
-        # cmd = self.connect_command()
-        # yield self.io.write(cmd)
-        #
-        # # Refresh state of the parser upon reconnect.
-        # if self.is_reconnecting:
-        #     self._ps.reset()
-        #
-        # # Send a PING expecting a PONG to make a roundtrip to the server
-        # # and assert that sent messages sent this far have been processed.
-        # yield self.io.write(PING_PROTO)
-        #
-        # # FIXME: Add readline timeout for these.
-        # next_op = yield self.io.read_until(_CRLF_, max_bytes=MAX_CONTROL_LINE_SIZE)
-        # if self.options["verbose"] and OK_OP in next_op:
-        #     next_op = yield self.io.read_until(_CRLF_, max_bytes=MAX_CONTROL_LINE_SIZE)
-        # if ERR_OP in next_op:
-        #     err_line = next_op.decode()
-        #     _, err_msg = err_line.split(_SPC_, 1)
-        #     # FIXME: Maybe handling could be more special here,
-        #     # checking for ErrAuthorization for example.
-        #     # yield from self._process_err(err_msg)
-        #     raise NatsError("nats: "+err_msg.rstrip('\r\n'))
-        #
-        # if PONG_PROTO in next_op:
-        #     self._status = NatsProtocol.CONNECTED
-        #
-        # # Queue and flusher for coalescing writes to the server.
-        # # self._flush_queue = tornado.queues.Queue(maxsize=1024)
-        # self._flush_queue = Queue(maxsize=1024)
-        # threads.deferToThread(self._flusher_loop)
-        # # self._loop.spawn_callback(self._flusher_loop)
 
     def _process_info(self, info_line):
         """
@@ -756,50 +546,6 @@ class NatsProtocol(Protocol):
 
         self._process_disconnect()
         self._end_flusher_loop()
-
-    @inlineCallbacks
-    def _schedule_primary_and_connect(self):
-        """
-        Attempts to connect to an available server.
-        """
-        # FIXME this needs to go into the factory
-        while True:
-            s = self._next_server()
-            if s is None:
-                raise ErrNoServers
-
-            # For the reconnection logic, we need to consider
-            # sleeping for a bit before trying to reconnect
-            # too soon to a server which has failed previously.
-            # Check when was the last attempt and back off before reconnecting
-            if s.last_attempt is not None:
-                now = time.time()
-                if (now - s.last_attempt) < self.options["reconnect_time_wait"]:
-                    yield sleep(self.options["reconnect_time_wait"])
-
-            s.reconnects += 1
-            s.last_attempt = time.time()
-            self.stats['reconnects'] += 1
-            try:
-                # yield self._server_connect(s)
-                self._server_connect(s)
-                self._current_server = s
-                # Reset number of reconnects upon successful connection.
-                s.reconnects = 0
-                self.io.set_close_callback(self._unbind)
-
-                if self.is_reconnecting and self._reconnected_cb is not None:
-                    self._reconnected_cb()
-
-                return
-            except (socket.error, tornado.iostream.StreamClosedError) as e:
-                if self._error_cb is not None:
-                    self._error_cb(ErrServerConnect(e))
-
-                # Continue trying to connect until there is an available server
-                # or bail in case there are no more available servers.
-                self._status = NatsProtocol.RECONNECTING
-                continue
 
     def _process_disconnect(self):
         """
