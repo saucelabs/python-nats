@@ -16,17 +16,12 @@ import logging
 import random
 import traceback
 
-import tornado.ioloop
-import tornado.gen
-import time
-from datetime import datetime
-
-from twisted.internet import reactor, protocol, defer, task
-from twisted.internet.defer import inlineCallbacks, returnValue
+from twisted.internet import reactor, task
+from twisted.internet.defer import inlineCallbacks
 from twisted.internet.error import TimeoutError, ConnectionRefusedError
 
+from nats.io.client import NatsClient
 from nats.io.utils import new_inbox
-from nats.io.client import NatsProtocol as NATS, NatsClientFactory, NatsClient
 
 
 @inlineCallbacks
@@ -39,17 +34,6 @@ def main():
             print "Failed to establish connection"
             reactor.stop()
             return
-        # ncf = NatsClientFactory(host="localhost", port=4222)
-        # nc = yield ncf.connect()
-        # nc = yield reactor.connectTCP("localhost", 4222, ncf)
-        # client_creator = protocol.ClientCreator(reactor, NATS, ping_interval=3)
-        # nc = yield client_creator.connectTCP("localhost", 4222)
-
-        # nc = NATS()
-
-        # Establish connection to the server.
-        # options = {"verbose": True, "servers": ["nats://127.0.0.1:4222"]}
-        # yield nc.connect(**options)
 
         def discover(msg=None):
             print("[Discover Received]: %s" % msg.data)

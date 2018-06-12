@@ -11,35 +11,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-import logging
-import socket
 import json
-import time
-import io
-import ssl
-from Queue import Queue
+import logging
 from functools import partial
-
-import tornado.iostream
-import tornado.concurrent
-import tornado.escape
-import tornado.gen
-import tornado.ioloop
-import tornado.queues
-
 from random import shuffle
 from urlparse import urlparse
-from datetime import timedelta
 
-from twisted.internet.protocol import ReconnectingClientFactory, Protocol, connectionDone, Factory
+from twisted.internet import task, defer, reactor
+from twisted.internet.defer import inlineCallbacks, returnValue, DeferredQueue
+from twisted.internet.protocol import ReconnectingClientFactory, Protocol, connectionDone
 
 from nats import __lang__, __version__
 from nats.io.errors import *
 from nats.io.nuid import NUID
 from nats.protocol.parser import *
-from nats.io.utils import sleep
-from twisted.internet.defer import inlineCallbacks, returnValue, TimeoutError, DeferredQueue
-from twisted.internet import task, defer, reactor, threads
 
 CONNECT_PROTO = b'{0} {1}{2}'
 PUB_PROTO     = b'{0} {1} {2} {3} {4}{5}{6}'
@@ -83,9 +68,6 @@ log = logging.getLogger("python-nats")
 
 
 class NatsProtocol(Protocol):
-    """
-    Tornado based client for NATS.
-    """
 
     DISCONNECTED = 0
     CONNECTED = 1
