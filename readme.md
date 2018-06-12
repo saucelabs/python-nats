@@ -15,6 +15,7 @@ with [gnatsd](https://github.com/nats-io/gnatsd) as the server:
 For Python 3, check [asyncio-nats](https://github.com/nats-io/asyncio-nats)
 
 ## TODO
+- [ ] replace explicit client connect with implicit one (NatsClient should connect to server on its own)
 - [ ] add ability to auto-resubscribe on reconnect
 - [ ] TLS
 - [ ] migrate tests
